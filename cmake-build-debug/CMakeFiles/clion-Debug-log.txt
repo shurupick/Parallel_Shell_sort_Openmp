@@ -1,0 +1,7 @@
+/Users/macbook/Applications/CLion.app/Contents/bin/cmake/mac/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/Users/macbook/Applications/CLion.app/Contents/bin/ninja/mac/ninja -DCMAKE_C_COMPILER=/usr/local/Cellar/gcc/13.2.0/bin/gcc-13 -DCMAKE_CXX_COMPILER=/usr/local/Cellar/gcc/13.2.0/bin/g++-13 -G Ninja -S "/Users/macbook/Desktop/Магистратура/1 семестр/Архитектура параллельных вычислительных систем/Лабораторные/Лаба2/lab2" -B "/Users/macbook/Desktop/Магистратура/1 семестр/Архитектура параллельных вычислительных систем/Лабораторные/Лаба2/lab2/cmake-build-debug"
+-- Found OpenMP_C: -fopenmp (found version "4.5") 
+-- Found OpenMP_CXX: -fopenmp (found version "4.5") 
+-- Found OpenMP: TRUE (found version "4.5")  
+-- Configuring done (2.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/macbook/Desktop/Магистратура/1 семестр/Архитектура параллельных вычислительных систем/Лабораторные/Лаба2/lab2/cmake-build-debug

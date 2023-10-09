@@ -1,0 +1,295 @@
+#include <iostream>
+#include <omp.h>
+#include <ctime>
+#include <chrono>
+#include <cmath>
+#include <string>
+
+#define SIZE_ARRAY 1000000//размерность массива
+#define NUM_THREADS 8
+
+int ThreadNum;  // количество потоков
+int ThreadID;   // идентификатор потока
+int DimSize;    // размерность виртуального гиперкуба
+
+#pragma omp threadprivate(ThreadID)
+
+void InitializeParallelSections() {
+    omp_set_num_threads(NUM_THREADS);
+#pragma omp parallel
+    {
+        ThreadID = omp_get_thread_num();
+#pragma omp single
+        ThreadNum = omp_get_num_threads();
+    }
+    DimSize = int(log10(double(ThreadNum))/log10(2.0))+1;
+}
+
+// Function for checking if the array is sorted
+bool IsSorted(int* pData, int Size) {
+    bool res = true;
+    for (int i=0; (i<Size-1)&&(res); i++) {
+        if (pData[i]>pData[i+1])
+            res=false;
+    }
+    return res;
+}
+
+// Function for calculation of the data block number in hypercube
+int GrayCode (int RingID, int DimSize) {
+    if ((RingID==0) && (DimSize==1))
+        return 0;
+    if ((RingID==1) && (DimSize==1))
+        return 1;
+    int res;
+    if (RingID < (1<<(DimSize-1)))
+        res = GrayCode(RingID, DimSize-1);
+    else
+        res = (1<<(DimSize-1))+GrayCode((1<<DimSize)-1-RingID, DimSize-1);
+    return res;
+}
+// Function for calculation of the data block number in linear sequence
+int ReverseGrayCode (int CubeID, int DimSize) {
+    for (int i=0; i<(1<<DimSize); i++)
+        if (CubeID == GrayCode(i, DimSize))
+            return i;
+}
+
+// Function for block pairs determination
+// “Compare-split” operation will be carried out for that pairs
+void SetBlockPairs (int* BlockPairs, int Iter) {
+    int PairNum = 0, FirstValue, SecondValue;
+    bool Exist;
+    for (int i=0; i<2*ThreadNum; i++) {
+        FirstValue = GrayCode(i, DimSize);
+        Exist = false;
+        for (int j=0; (j<PairNum)&&(!Exist); j++)
+            if (BlockPairs[2*j+1] == FirstValue)
+                Exist = true;
+        if (!Exist) {
+            SecondValue = FirstValue^(1<<(DimSize-Iter-1));
+            BlockPairs[2*PairNum] = FirstValue;
+            BlockPairs[2*PairNum+1] = SecondValue;
+            PairNum++;
+        } // if
+    }// for
+}
+
+// Function for determination of the block pair
+// Current thread will perform “compare-split” operation for this block pair
+int FindMyPair (int* BlockPairs, int ThreadID, int Iter) {
+    int BlockID=0, index, result;
+    for (int i=0; i<ThreadNum; i++) {
+        BlockID = BlockPairs[2*i];
+        if (Iter == 0)
+            index = BlockID%(1<<(DimSize-Iter-1));
+        if ((Iter>0)&&(Iter<DimSize-1))
+            index = ((BlockID>>(DimSize-Iter))<<(DimSize-Iter-1)) |
+                    (BlockID%(1<<(DimSize-Iter-1)));
+        if (Iter == DimSize-1)
+            index = BlockID>>1;
+        if (index == ThreadID) {
+            result = i;
+            break;
+        }
+    }
+    return result;
+}
+
+void QuickSort(int *array, int low, int high)
+{
+    int i = low;
+    int j = high;
+    int pivot = array[(i + j) / 2];
+    int temp;
+
+    while (i <= j)
+    {
+        while (array[i] < pivot)
+            i++;
+        while (array[j] > pivot)
+            j--;
+        if (i <= j)
+        {
+            temp = array[i];
+            array[i] = array[j];
+            array[j] = temp;
+            i++;
+            j--;
+        }
+    }
+    if (j > low)
+        QuickSort(array, low, j);
+    if (i < high)
+        QuickSort(array, i, high);
+}
+
+// Function for serial quick sorting
+void QuickSorter (int* pData, int first, int last) {
+    if (first >= last)
+        return;
+    int PivotPos = first;
+    double Pivot = pData[first];
+    for (int i=first+1; i<=last; i++) {
+        if (pData[i] < Pivot) {
+            if (i != PivotPos+1)
+                std::swap(pData[i], pData[PivotPos+1]); PivotPos++;
+            PivotPos++;
+        }
+    }
+    std::swap (pData[first], pData[PivotPos]);
+    QuickSorter(pData, first, PivotPos-1);
+    QuickSorter(pData, PivotPos+1, last);
+}
+
+void ShellSort(int* arr, int n){
+    for (int interval = n / 2; interval > 0; interval /= 2) {
+        for (int i = interval; i < n; i += 1) {
+            int temp = arr[i];
+            int j;
+            for (j = i; j >= interval && arr[j - interval] > temp; j -= interval) {
+                arr[j] = arr[j - interval];
+            }
+            arr[j] = temp;
+        }
+    }
+}
+
+// Function for merging of two sorted blocks
+void MergeBlocks(int* pData, int Index1, int BlockSize1, int Index2,
+                 int BlockSize2) {
+
+    int TotalSize = BlockSize1 + BlockSize2;
+    bool isSorted = false; // Initially array is unsorted
+
+    while (!isSorted) {
+        isSorted = true;
+        // Perform Bubble sort on odd indexed element
+        for (int i = 1; i <= TotalSize - 2; i = i + 2) {
+            if (pData[Index1+i] > pData[Index1+i+1]) {
+                std::swap(pData[Index1+i], pData[Index1+i+1]);
+                isSorted = false;
+            }
+        }
+        // Perform Bubble sort on even indexed element
+        for (int i = 0; i <= TotalSize - 2; i = i + 2) {
+            if (pData[Index1+i] > pData[Index1+i + 1]) {
+                std::swap(pData[Index1+i], pData[Index1+i + 1]);
+                isSorted = false;
+            }
+        }
+    }
+    return;
+}
+
+// Function for carrying out the “compare-split” operation
+// for two non-sorted data blocks according to the pivot value
+void CompareSplitBlocks (int* pData, int pFirstBlock, int FirstBlockSize,
+                         int pSecondBlock, int SecondBlockSize) {
+    int TotalSize = FirstBlockSize + SecondBlockSize;
+    int* pTempBlock = new int [TotalSize];
+
+    for(int i = 0; i < FirstBlockSize; i++)
+        pTempBlock[i] = pData[pFirstBlock+i];
+    for(int i = 0; i < SecondBlockSize; i++)
+        pTempBlock[SecondBlockSize + i] = pData[pSecondBlock + i];
+    QuickSort(pTempBlock,0,TotalSize-1);
+    for (int i=0; i<FirstBlockSize; i++)
+        pData[pFirstBlock+i] = pTempBlock[i];
+    for (int i=0; i<SecondBlockSize; i++)
+        pData[pSecondBlock+i] = pTempBlock[FirstBlockSize+i];
+    delete [] pTempBlock;
+}
+
+void print_array(int *arr){
+    for(int i = 0; i < SIZE_ARRAY; i++){
+        if(i%(SIZE_ARRAY/8)==0 && i!=0)
+            std::cout << std::endl;
+        std::cout << arr[i] << " | ";
+    }
+    std::cout << std::endl;
+}
+
+// Function for parallel Shell sorting
+void ParallelShellSort(int* pData, int Size){
+    InitializeParallelSections();
+    int* Index = new int [2*ThreadNum];//по сути номер элемента с которого начинается данный блок
+    int* BlockSize = new int [2*ThreadNum];//
+    int * BlockPairs = new int [2*ThreadNum];
+    for (int i=0; i<2*ThreadNum; i++) {
+        Index[i] = int((i*Size)/double(2*ThreadNum));
+        if (i<2*ThreadNum-1)
+            BlockSize[i] = int (((i+1)*Size)/double(2*ThreadNum)) - Index[i];
+        else
+            BlockSize[i] = Size-Index[i];
+    }
+    // Local sorting of data blocks (reverse cycle scheme)
+    #pragma omp parallel
+    {
+        int BlockID = ReverseGrayCode(ThreadNum+ThreadID, DimSize);
+        QuickSort(pData, Index[BlockID], Index[BlockID]+BlockSize[BlockID]-1);
+        BlockID = ReverseGrayCode(ThreadID, DimSize);
+        QuickSort(pData, Index[BlockID], Index[BlockID]+BlockSize[BlockID]-1);
+    }
+    // Iterations of the Shell method
+    for (int Iter=0; (Iter<DimSize) && (!IsSorted(pData, Size)); Iter++) {
+        // Block pairs determination
+        SetBlockPairs(BlockPairs, Iter);
+        // Compare-split operation for data blocks
+        #pragma omp parallel
+        {
+            int MyPairNum = FindMyPair(BlockPairs, ThreadID, Iter);
+            int FirstBlock = ReverseGrayCode(BlockPairs[2*MyPairNum], DimSize);
+            int SecondBlock = ReverseGrayCode(BlockPairs[2*MyPairNum+1], DimSize);
+            CompareSplitBlocks(pData, Index[FirstBlock], BlockSize[FirstBlock],
+                               Index[SecondBlock], BlockSize[SecondBlock]);
+        } // pragma omp parallel
+    } // for
+    // Odd-even blocks’ transposition
+    int Iter = 1;
+    while (!IsSorted(pData, Size)) {
+        #pragma omp parallel
+        {
+            if (Iter%2 == 0) // Even iteration
+                MergeBlocks(pData, Index[2*ThreadID], BlockSize[2*ThreadID],
+                            Index[2*ThreadID+1], BlockSize[2*ThreadID+1]);
+            else              //  Odd iteration
+            if (ThreadID<ThreadNum-1)
+                MergeBlocks(pData, Index[2*ThreadID+1], BlockSize[2*ThreadID+1], Index[2*ThreadID+2], BlockSize[2*ThreadID+2]);
+        } // pragma omp parallel
+        std::cout << Iter << std::endl;
+        Iter++;
+    } // while
+    delete [] Index;
+    delete [] BlockSize;
+    delete [] BlockPairs;
+}
+
+//заполнение массива
+void  rand_elem_array(int *arr){
+    for (int array_count = 0; array_count < SIZE_ARRAY; array_count++)
+        arr[array_count] = random() % 100;
+}
+
+int main(){
+    int *array = new int[SIZE_ARRAY] {};
+    srandom(time(nullptr));
+    rand_elem_array(array);
+    auto start = std::chrono::high_resolution_clock::now();
+    ParallelShellSort(array,SIZE_ARRAY);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<float> duration = end - start;
+    float secTomcsec = duration.count() * 1e6;
+
+    std::cout << "Размер массива – " << SIZE_ARRAY << std::endl
+              << "Количество потоков – " << NUM_THREADS << std::endl;
+    std::cout << "Время работы алгоритма, мксек "<< secTomcsec <<std::endl;
+
+    if(IsSorted(array,SIZE_ARRAY))
+        std::cout << "массив отсортирован" << std::endl;
+    else
+        std::cout << "массив не отсортирован" << std::endl;
+    delete [] array;
+}
+

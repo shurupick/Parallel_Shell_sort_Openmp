@@ -1,0 +1,3 @@
+/Users/macbook/Desktop/Магистратура/1 семестр/Архитектура параллельных вычислительных систем/Лабораторные/Лаба2/lab2/cmake-build-debug/CMakeFiles/lab2.dir
+/Users/macbook/Desktop/Магистратура/1 семестр/Архитектура параллельных вычислительных систем/Лабораторные/Лаба2/lab2/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/macbook/Desktop/Магистратура/1 семестр/Архитектура параллельных вычислительных систем/Лабораторные/Лаба2/lab2/cmake-build-debug/CMakeFiles/rebuild_cache.dir

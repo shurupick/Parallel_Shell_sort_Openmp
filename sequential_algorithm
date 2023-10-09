@@ -1,0 +1,50 @@
+#include <iostream>
+#include <ctime>
+#include <chrono>
+
+
+#define SIZE_ARRAY 1000000
+
+void ShellSort(int* A, int n){
+    int incr = n/2;
+    int j;
+    while( incr > 0 ) {
+        for ( int i=incr+1; i<n; i++  ) {
+            j = i-incr;
+            while ( j > 0 )
+                if ( A[j] > A[j+incr] ){
+                    std::swap(A[j], A[j+incr]);
+                    j = j - incr; }
+                else j = 0; }
+        incr = incr/2;
+    }
+}
+
+void  rand_elem_array(int *arr){
+    for (int array_count = 0; array_count < SIZE_ARRAY; array_count++)
+        arr[array_count] = random() % 100;
+}
+
+int main()
+{
+    int *array = new int[SIZE_ARRAY] {};
+    srandom(time(nullptr));
+    rand_elem_array(array);
+
+    //print_array(array);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    ShellSort(array, SIZE_ARRAY);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<float> duration = end - start;
+    float secTomcsec = duration.count() * 1e6;
+
+    //print_array(array);
+
+    std::cout << secTomcsec;
+
+    delete [] array ;
+
+    return 0;
+}
